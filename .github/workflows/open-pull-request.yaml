@@ -1,0 +1,47 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+  # Concurrency group name ensures concurrent workflow runs wait for any in-progress job to finish
+concurrency:
+  group: merge-${{ github.ref }}
+
+env:
+  WRANGLER_ENV: pr-${{ github.event.pull_request.id }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    environment: development
+    name: Deploy Downtown65 API
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install
+      - name: Deploy Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          workingDirectory: "apps/api"
+          environment: pr-${{ github.event.pull_request.id }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          preCommands: |
+            RESULT=$(./scripts/check-d1.sh dt65-pr-${{ github.event.pull_request.id }} pr-${{ github.event.pull_request.id }})
+            if [ "$RESULT" == "exists" ]; then
+              echo "The database exists."
+            else
+              npx wrangler d1 create dt65-pr-${{ github.event.pull_request.id }}
+            fi
+          postCommands: |
+            echo "*** post commands ***"
+            echo "******"
